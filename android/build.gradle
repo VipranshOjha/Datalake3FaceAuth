@@ -1,0 +1,94 @@
+/**
+ * build.gradle — Android Library Module Build Configuration
+ * Datalake 3.0 Face Authentication Native Module
+ * Hackathon 7.0 | NHAI
+ *
+ * Compiles the C++ native engine via CMake (NDK) and packages
+ * the Java/JNI glue code as a React Native native module.
+ */
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:8.7.3"
+    }
+}
+
+apply plugin: 'com.android.library'
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+android {
+    namespace 'com.datalake.faceauth'
+    compileSdkVersion 34
+
+    // NDK version locked for reproducible builds
+    ndkVersion "25.2.9519653"
+
+    defaultConfig {
+        // Android 8.0 (API 26) — minimum per Hackathon spec
+        minSdkVersion 26
+        targetSdkVersion 34
+
+        externalNativeBuild {
+            cmake {
+                cppFlags "-O2 -frtti -fno-exceptions -std=c++17"
+                arguments "-DANDROID_STL=c++_shared",
+                          "-DANDROID_TOOLCHAIN=clang"
+
+                // Target ARM architectures only (covers ~99% of Indian market devices)
+                abiFilters 'armeabi-v7a', 'arm64-v8a'
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // Don't strip debug symbols from our lib in debug builds
+            keepDebugSymbols += '*/armeabi-v7a/libdatalake_faceauth.so'
+            keepDebugSymbols += '*/arm64-v8a/libdatalake_faceauth.so'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+        }
+        debug {
+            // Keep debug symbols for profiling
+            jniDebuggable true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        prefab true
+    }
+}
+
+dependencies {
+    // React Native core dependency — version resolved by the host app
+    //noinspection GradleDynamicVersion
+    implementation 'com.facebook.react:react-android:+'
+
+    // fbjni for JNI bindings
+    implementation 'com.facebook.fbjni:fbjni:0.5.1'
+}

@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package datalake.proto;
+
+message AttendanceRecord {
+    string user_id = 1;
+    int64 timestamp_monotonic = 2;
+    double latitude = 3;
+    double longitude = 4;
+    string liveness_status = 5;
+    string signature = 6;
+}
+
+message SyncPayload {
+    repeated AttendanceRecord records = 1;
+}

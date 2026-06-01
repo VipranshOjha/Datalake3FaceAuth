@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    AndroidManifest.xml
+    Datalake 3.0 — Face Authentication Native Module
+    Hackathon 7.0 | NHAI
+
+    Declares permissions required by the face authentication module:
+    - CAMERA:              Front-facing camera access for face capture
+    - INTERNET:            Sync manager AWS API calls (when online)
+    - ACCESS_FINE_LOCATION:  GPS coordinates stored with attendance records
+    - ACCESS_COARSE_LOCATION: Fallback location provider
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.datalake.faceauth">
+
+    <!-- Camera access for face detection and liveness -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.front" android:required="true" />
+
+    <!-- Network access for sync manager (when connectivity available) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Location for attendance records -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+</manifest>

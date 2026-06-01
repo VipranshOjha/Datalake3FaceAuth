@@ -1,0 +1,4 @@
+datalake.proto.AttendanceRecord.user_id max_size:64
+datalake.proto.AttendanceRecord.liveness_status max_size:32
+datalake.proto.AttendanceRecord.signature max_size:128
+datalake.proto.SyncPayload.records max_count:100
