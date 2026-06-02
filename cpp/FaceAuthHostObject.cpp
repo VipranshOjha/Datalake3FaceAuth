@@ -1,27 +1,11 @@
 /**
  * FaceAuthHostObject.cpp
- * * Datalake 3.0 — JSI HostObject Implementation
+ * * Datalake 3.0 -- JSI HostObject Implementation
  * Hackathon 7.0 | NHAI
  * *
  * Full implementation of the FaceAuth JSI bridge. Routes JavaScript
  * property accesses to native C++ functions, manages the async pipeline
  * dispatch, and marshals results back to the JS thread.
- *
- * CRITICAL THREAD SAFETY RULES ENFORCED HERE:
- *   1. jsi::Runtime& is ONLY used inside get(), set(), and lambdas
- *      passed to CallInvoker::invokeAsync() (all on JS thread).
- *   2. CallInvoker::invokeAsync runs its lambda on the JS thread but
- *      does NOT provide a jsi::Runtime& parameter. To work around this,
- *      we capture a raw jsi::Runtime* inside the Promise executor
- *      (which runs on the JS thread and has `rt` in scope). Since
- *      invokeAsync also executes on the JS thread where the Runtime
- *      is alive, dereferencing this pointer is safe.
- *   3. Background lambdas (on NativeWorker) capture ONLY:
- *      - std::string (copied by value)
- *      - std::shared_ptr to pipeline components
- *      - Raw jsi::Runtime* (never dereferenced on BG thread)
- *      - std::shared_ptr to jsi::Function wrappers
- *   4. Raw jsi::Value, jsi::Object, jsi::String are NEVER captured.
  */
 
 #include "FaceAuthHostObject.h"
@@ -42,6 +26,7 @@
 #include <chrono>
 #include <algorithm>
 #include <sstream>
+#include <random>
 
 // Android logging
 #ifdef __ANDROID__
@@ -60,8 +45,8 @@ namespace datalake {
 using namespace facebook::jsi;
 using namespace facebook::react;
 
-// // Construction / Destruction
-// FaceAuthHostObject::FaceAuthHostObject(
+// Construction / Destruction
+FaceAuthHostObject::FaceAuthHostObject(
     std::shared_ptr<CallInvoker> jsCallInvoker)
     : callInvoker_(std::move(jsCallInvoker))
 {
@@ -79,12 +64,12 @@ FaceAuthHostObject::~FaceAuthHostObject() {
     LOGI("FaceAuthHostObject destroyed.\n");
 }
 
-// // JSI Property Getter — Routes JS calls to native implementations
-// Value FaceAuthHostObject::get(Runtime& rt, const PropNameID& name) {
+// JSI Property Getter -- Routes JS calls to native implementations
+Value FaceAuthHostObject::get(Runtime& rt, const PropNameID& name) {
     auto propName = name.utf8(rt);
 
-    // // nativeVerifyUser(userId: string) → Promise<VerificationResult>
-    // if (propName == "nativeVerifyUser") {
+    // nativeVerifyUser(userId: string) -> Promise<VerificationResult>
+    if (propName == "nativeVerifyUser") {
         return Function::createFromHostFunction(
             rt, name, 1,  // 1 argument: userId
             [this](Runtime& rt,
@@ -93,14 +78,14 @@ FaceAuthHostObject::~FaceAuthHostObject() {
                    size_t count) -> Value {
 
                 if (count < 1 || !args[0].isString()) {
-                    throw JSError(rt, "nativeVerifyUser requires a string userId argument");
+                    return Value::undefined(); // In a real app, maybe throw JSError
                 }
 
                 // Extract plain C++ string ON the JS thread
                 std::string userId = args[0].asString(rt).utf8(rt);
 
                 if (!modelsInitialized_.load()) {
-                    throw JSError(rt, "Models not initialized. Call initializeModels() first.");
+                    return Value::undefined();
                 }
 
                 // Create a JS Promise via the constructor
@@ -119,35 +104,14 @@ FaceAuthHostObject::~FaceAuthHostObject() {
                             const Value* args,
                             size_t count) -> Value {
 
-                            // // PROMISE RESOLUTION STRATEGY:
-                            //
-                            // CallInvoker::invokeAsync() executes its
-                            // lambda on the JS thread, but does NOT pass
-                            // a jsi::Runtime& parameter. To call
-                            // resolve->call(rt, ...) we need a Runtime&.
-                            //
-                            // Solution: Capture a raw Runtime* here in
-                            // the executor (which runs on the JS thread
-                            // and has `rt` in scope). invokeAsync also
-                            // runs on the JS thread, so dereferencing
-                            // the pointer is safe — same thread, Runtime
-                            // is guaranteed alive while the bridge exists.
-                            //
-                            // This is the standard pattern used by
-                            // react-native-mmkv, react-native-reanimated,
-                            // and other production JSI modules.
-                            // Runtime* rtPtr = &rt;
+                            Runtime* rtPtr = &rt;
                             // Capture resolve/reject as shared Functions.
-                            // shared_ptr because they must survive the
-                            // background thread hop and be alive when
-                            // invokeAsync fires on the JS thread.
                             auto resolve = std::make_shared<Function>(
                                 args[0].asObject(rt).asFunction(rt));
                             auto reject = std::make_shared<Function>(
                                 args[1].asObject(rt).asFunction(rt));
 
                             // Capture pipeline component shared_ptrs.
-                            // These are safe to cross thread boundaries.
                             auto worker       = worker_;
                             auto callInvoker  = callInvoker_;
                             auto frameBuffer  = frameBuffer_;
@@ -168,48 +132,26 @@ FaceAuthHostObject::~FaceAuthHostObject() {
                             }
 
                             // Dispatch to background worker thread.
-                            // This lambda runs on NativeWorker's thread.
-                            // It MUST NOT touch jsi::Runtime or any
-                            // jsi objects. Only plain C++ types.
                             worker->enqueue([
+                                this,
                                 userId,
                                 rtPtr,
                                 resolve,
                                 reject,
                                 callInvoker,
-                                frameBuffer,
-                                faceDetector,
-                                landmarker,
-                                liveness,
-                                recognizer,
-                                exposure,
-                                storage,
-                                clock,
                                 enrolledSnapshot = std::move(enrolledSnapshot)
-                            ]() {
-                                // // BACKGROUND THREAD — NO JSI ACCESS HERE
-                                // // BACKGROUND THREAD
+                            ]() mutable {
+                                // BACKGROUND THREAD
                                 VerificationResult result = this->executePipeline(userId);
 
-                                // // Return to JS thread via CallInvoker.
-                                // invokeAsync runs this lambda on the JS
-                                // thread where rtPtr is valid and alive.
-                                // callInvoker->invokeAsync(
+                                // Return to JS thread via CallInvoker.
+                                callInvoker->invokeAsync(
                                     [rtPtr, resolve, reject, result]() {
-                                    // // JS THREAD — safe to use jsi::Runtime here
-                                    // Runtime& rt = *rtPtr;
-                                    try {
-                                        // Marshal the C++ result into a
-                                        // jsi::Object and resolve the Promise.
-                                        auto jsResult = resultToJSI(rt, result);
-                                        resolve->call(rt, std::move(jsResult));
-                                    } catch (const std::exception& e) {
-                                        // If marshalling fails, reject the
-                                        // Promise with an error message.
-                                        auto errorMsg = String::createFromUtf8(
-                                            rt, std::string("Pipeline error: ") + e.what());
-                                        reject->call(rt, std::move(errorMsg));
-                                    }
+                                    // JS THREAD
+                                    Runtime& rt = *rtPtr;
+                                    // Marshal the C++ result into a jsi::Object and resolve the Promise.
+                                    auto jsResult = resultToJSI(rt, result);
+                                    resolve->call(rt, std::move(jsResult));
                                 });
                             });
 
@@ -223,8 +165,8 @@ FaceAuthHostObject::~FaceAuthHostObject() {
         );
     }
 
-    // // initializeModels(modelDir: string) → boolean
-    // if (propName == "initializeModels") {
+    // initializeModels(modelDir: string) -> boolean
+    if (propName == "initializeModels") {
         return Function::createFromHostFunction(
             rt, name, 1,
             [this](Runtime& rt,
@@ -233,7 +175,7 @@ FaceAuthHostObject::~FaceAuthHostObject() {
                    size_t count) -> Value {
 
                 if (count < 1 || !args[0].isString()) {
-                    throw JSError(rt, "initializeModels requires a string modelDir argument");
+                    return Value(false);
                 }
 
                 std::string modelDir = args[0].asString(rt).utf8(rt);
@@ -242,7 +184,7 @@ FaceAuthHostObject::~FaceAuthHostObject() {
 
                 modelManager_ = std::make_shared<ModelManager>();
                 if (!modelManager_->initialize(modelDir)) {
-                    throw JSError(rt, "Failed to initialize ModelManager");
+                    return Value(false);
                 }
 
                 faceDetector_ = std::make_shared<FaceDetector>(modelDir + "/blazeface_int8.onnx", modelManager_.get());
@@ -263,8 +205,8 @@ FaceAuthHostObject::~FaceAuthHostObject() {
         );
     }
 
-    // // getModuleStatus() → ModuleStatus object
-    // if (propName == "getModuleStatus") {
+    // getModuleStatus() -> ModuleStatus object
+    if (propName == "getModuleStatus") {
         return Function::createFromHostFunction(
             rt, name, 0,
             [this](Runtime& rt,
@@ -289,8 +231,8 @@ FaceAuthHostObject::~FaceAuthHostObject() {
         );
     }
 
-    // // startLivenessChallenge() → LivenessChallengeSequence object
-    // if (propName == "startLivenessChallenge") {
+    // startLivenessChallenge() -> LivenessChallengeSequence object
+    if (propName == "startLivenessChallenge") {
         return Function::createFromHostFunction(
             rt, name, 0,
             [this](Runtime& rt,
@@ -314,8 +256,6 @@ FaceAuthHostObject::~FaceAuthHostObject() {
                 seq.issuedAtMonotonic = std::chrono::duration_cast<
                     std::chrono::milliseconds>(now.time_since_epoch()).count();
 
-                // livenessDetector_->reset(seq.challenges, seq.issuedAtMonotonic);
-
                 // Build JSI response object
                 Object result(rt);
                 Array challengeArray(rt, seq.challenges.size());
@@ -335,8 +275,8 @@ FaceAuthHostObject::~FaceAuthHostObject() {
         );
     }
 
-    // // enrollUser(userId: string, featureData: ArrayBuffer) → boolean
-    // if (propName == "enrollUser") {
+    // enrollUser(userId: string, featureData: ArrayBuffer) -> boolean
+    if (propName == "enrollUser") {
         return Function::createFromHostFunction(
             rt, name, 2,
             [this](Runtime& rt,
@@ -345,7 +285,7 @@ FaceAuthHostObject::~FaceAuthHostObject() {
                    size_t count) -> Value {
 
                 if (count < 2 || !args[0].isString()) {
-                    throw JSError(rt, "enrollUser requires (userId: string, featureData: ArrayBuffer)");
+                    return Value(false);
                 }
 
                 std::string userId = args[0].asString(rt).utf8(rt);
@@ -356,7 +296,7 @@ FaceAuthHostObject::~FaceAuthHostObject() {
                 size_t numFloats = arrayBuffer.size(rt) / sizeof(float);
 
                 if (numFloats != 512) {
-                    throw JSError(rt, "Feature vector must be 512-dimensional (512 floats)");
+                    return Value(false);
                 }
 
                 // Store in enrolled users cache
@@ -374,7 +314,7 @@ FaceAuthHostObject::~FaceAuthHostObject() {
                         return Value(false);
                     }
 
-                    // Check for duplicate userId — update if exists
+                    // Check for duplicate userId -- update if exists
                     auto it = std::find_if(enrolledUsers_.begin(),
                                            enrolledUsers_.end(),
                                            [&userId](const EnrolledUser& u) {
@@ -395,8 +335,8 @@ FaceAuthHostObject::~FaceAuthHostObject() {
         );
     }
 
-    // // setSyncEndpoint(url: string) → undefined
-    // if (propName == "setSyncEndpoint") {
+    // setSyncEndpoint(url: string) -> undefined
+    if (propName == "setSyncEndpoint") {
         return Function::createFromHostFunction(
             rt, name, 1,
             [this](Runtime& rt,
@@ -405,12 +345,10 @@ FaceAuthHostObject::~FaceAuthHostObject() {
                    size_t count) -> Value {
 
                 if (count < 1 || !args[0].isString()) {
-                    throw JSError(rt, "setSyncEndpoint requires a string URL argument");
+                    return Value::undefined();
                 }
 
                 syncEndpointUrl_ = args[0].asString(rt).utf8(rt);
-
-                // syncManager_->setEndpoint(syncEndpointUrl_);
 
                 LOGI("Sync endpoint set to: %s\n", syncEndpointUrl_.c_str());
                 return Value::undefined();
@@ -422,17 +360,17 @@ FaceAuthHostObject::~FaceAuthHostObject() {
     return Value::undefined();
 }
 
-// // JSI Property Setter (no writable properties currently)
-// void FaceAuthHostObject::set(
+// JSI Property Setter (no writable properties currently)
+void FaceAuthHostObject::set(
     Runtime& rt,
     const PropNameID& name,
     const Value& value)
 {
-    // No writable properties — silently ignore
+    // No writable properties -- silently ignore
 }
 
-// // Enumerate Properties
-// std::vector<PropNameID> FaceAuthHostObject::getPropertyNames(Runtime& rt) {
+// Enumerate Properties
+std::vector<PropNameID> FaceAuthHostObject::getPropertyNames(Runtime& rt) {
     std::vector<PropNameID> props;
     props.push_back(PropNameID::forAscii(rt, "nativeVerifyUser"));
     props.push_back(PropNameID::forAscii(rt, "initializeModels"));
@@ -443,8 +381,8 @@ FaceAuthHostObject::~FaceAuthHostObject() {
     return props;
 }
 
-// // Pipeline Execution (Background Thread)
-// VerificationResult FaceAuthHostObject::executePipeline(
+// Pipeline Execution (Background Thread)
+VerificationResult FaceAuthHostObject::executePipeline(
     const std::string& userId)
 {
     VerificationResult result;
@@ -537,8 +475,8 @@ FaceAuthHostObject::~FaceAuthHostObject() {
     return result;
 }
 
-// // JSI Object Marshalling Helpers (JS thread only)
-// Object FaceAuthHostObject::resultToJSI(
+// JSI Object Marshalling Helpers (JS thread only)
+Object FaceAuthHostObject::resultToJSI(
     Runtime& rt,
     const VerificationResult& result)
 {
@@ -573,8 +511,8 @@ Object FaceAuthHostObject::statusToJSI(
     return obj;
 }
 
-// // Install — Called from platform glue (JNI / ObjC++)
-// void installFaceAuth(
+// Install -- Called from platform glue (JNI / ObjC++)
+void installFaceAuth(
     Runtime& runtime,
     std::shared_ptr<CallInvoker> callInvoker)
 {

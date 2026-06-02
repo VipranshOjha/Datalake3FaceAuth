@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/NHAI_Hackathon.iml" filepath="$PROJECT_DIR$/.idea/NHAI_Hackathon.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/Datalake3FaceAuth.iml" filepath="$PROJECT_DIR$/.idea/Datalake3FaceAuth.iml" />
     </modules>
   </component>
 </project>

@@ -7,6 +7,7 @@
  * the Java/JNI glue code as a React Native native module.
  */
 
+
 buildscript {
     repositories {
         google()
@@ -85,9 +86,8 @@ android {
 }
 
 dependencies {
-    // React Native core dependency — version resolved by the host app
-    //noinspection GradleDynamicVersion
-    implementation 'com.facebook.react:react-android:+'
+    // React Native core dependency — version pinned to match package.json
+    implementation 'com.facebook.react:react-android:0.73.6'
 
     // fbjni for JNI bindings
     implementation 'com.facebook.fbjni:fbjni:0.5.1'

@@ -24,7 +24,7 @@ void installFaceFrameProcessorPlugin(Runtime& runtime, std::shared_ptr<facebook:
             static thread_local std::unique_ptr<PlatformImageHandler> handlerInstance = nullptr;
 
             if (count < 1 || !args[0].isObject()) {
-                throw JSError(rt, "scanFaces expects a Frame object");
+                return Value::undefined();
             }
 
             void* nativeFrame = nullptr;

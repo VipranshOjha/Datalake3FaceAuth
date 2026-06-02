@@ -1,6 +1,6 @@
 /**
  * ImageUtils.cpp
- * * Datalake 3.0 — High-Performance Image Manipulation
+ * * Datalake 3.0 -- High-Performance Image Manipulation
  * Hackathon 7.0 | NHAI
  * */
 #include "ImageUtils.h"
@@ -17,8 +17,8 @@
 
 namespace datalake {
 
-// // Android Path: DMA-BUF and NEON YUV->RGB
-// #ifdef __ANDROID
+// Android Path: DMA-BUF and NEON YUV->RGB
+#ifdef __ANDROID__
 bool ImageUtils::convertAHardwareBufferToRGB(AHardwareBuffer* hwBuffer, uint8_t* rgbOut, int outWidth, int outHeight) {
     if (!hwBuffer || !rgbOut) return false;
 
@@ -48,7 +48,6 @@ void ImageUtils::convertYUVToRGB_NEON(const uint8_t* yPlane, const uint8_t* uvPl
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; x += 8) {
             // Simplified fallback for demonstration.
-            // In a full implementation, we'd load uint8x8_t, use vmlal_u8, and store uint8x8x3_t.
             for (int i = 0; i < 8 && x + i < width; ++i) {
                 int cx = x + i;
                 int yIdx = y * width + cx;
@@ -75,8 +74,8 @@ void ImageUtils::convertYUVToRGB_NEON(const uint8_t* yPlane, const uint8_t* uvPl
 }
 #endif
 
-// // iOS Path: vImage Accelerate Framework
-// #ifdef __APPLE
+// iOS Path: vImage Accelerate Framework
+#ifdef __APPLE__
 bool ImageUtils::convertCVPixelBufferToRGB(CVPixelBufferRef pixelBuffer, uint8_t* rgbOut, int outWidth, int outHeight) {
     if (!pixelBuffer || !rgbOut) return false;
 
@@ -136,8 +135,8 @@ bool ImageUtils::convertCVPixelBufferToRGB(CVPixelBufferRef pixelBuffer, uint8_t
 }
 #endif
 
-// // Matrix Operators & Alignment
-// void ImageUtils::cropAlignFace(const uint8_t* srcRgb, int srcW, int srcH,
+// Matrix Operators & Alignment
+void ImageUtils::cropAlignFace(const uint8_t* srcRgb, int srcW, int srcH,
                                const std::vector<Point2D>& landmarks5,
                                uint8_t* dstRgb, int dstW, int dstH) {
     // Affine transformation based on 5-point landmarks to correct tilt/yaw

@@ -79,20 +79,19 @@ public class FaceAuthModule extends ReactContextBaseJavaModule {
                 return false;
             }
 
-            // Get the CallInvoker for async JS thread callbacks
+            // Get the CallInvokerHolder for async JS thread callbacks
             // This allows our C++ background thread to safely dispatch
             // results back to the JS thread.
-            long callInvokerPtr = context.getCatalystInstance()
-                    .getJSCallInvokerHolder()
-                    .getJSCallInvoker();
+            Object callInvokerHolder = context.getCatalystInstance()
+                    .getJSCallInvokerHolder();
 
-            if (callInvokerPtr == 0) {
-                Log.e(TAG, "install(): CallInvoker pointer is null.");
+            if (callInvokerHolder == null) {
+                Log.e(TAG, "install(): CallInvokerHolder is null.");
                 return false;
             }
 
             // Call into C++ to register the JSI HostObject
-            nativeInstall(runtimePtr, callInvokerPtr);
+            nativeInstall(runtimePtr, callInvokerHolder);
 
             Log.i(TAG, "install(): FaceAuth JSI module installed successfully");
             return true;
@@ -107,5 +106,5 @@ public class FaceAuthModule extends ReactContextBaseJavaModule {
      * JNI bridge to C++ installFaceAuth().
      * Implemented in android/src/main/cpp/jni_entry.cpp
      */
-    private static native void nativeInstall(long runtimePtr, long callInvokerPtr);
+    private static native void nativeInstall(long runtimePtr, Object callInvokerHolder);
 }

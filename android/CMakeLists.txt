@@ -119,6 +119,7 @@ target_include_directories(datalake_faceauth PRIVATE
     "${CPP_DIR}"
     "${CPP_DIR}/third_party"
     "${CPP_DIR}/third_party/nanopb"
+    "${CPP_DIR}/third_party/onnxruntime"
     "${CPP_DIR}/proto"
     "${CMAKE_SOURCE_DIR}/src/main/cpp"
 )

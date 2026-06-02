@@ -1,6 +1,6 @@
 /**
  * FaceAuthHostObject.h
- * * Datalake 3.0 — Offline Face Recognition & Liveness Detection Module
+ * * Datalake 3.0 -- Offline Face Recognition & Liveness Detection Module
  * Hackathon 7.0 | NHAI
  * *
  * JSI HostObject that exposes the native face authentication pipeline
@@ -29,9 +29,11 @@
 #include <vector>
 #include <cstdint>
 #include <atomic>
+#include <mutex>
 
-// // Forward declarations — no header coupling to pipeline internals
-// namespace datalake {
+// Forward declarations -- no header coupling to pipeline internals
+namespace datalake {
+
 class NativeWorker;
 class CircularFrameBuffer;
 class FaceDetector;
@@ -44,24 +46,25 @@ class StorageEngine;
 class SyncManager;
 class MonotonicClock;
 
-// // Shared Frame State Contract (Thread-Isolation Memory Protocol)
-// //
+// Shared Frame State Contract (Thread-Isolation Memory Protocol)
+//
 // These types define the cross-thread memory isolation contract between
 // the camera ingestion thread (producer) and the NativeWorker inference
 // thread (consumer) for the CircularFrameBuffer.
 //
 // TRANSITION RULES (enforced via atomic CAS):
 //
-//   Camera thread:  EMPTY → WRITING → READY_FOR_INFERENCE
-//                   (skips slots in LOCKED_FOR_INFERENCE — no blocking)
+//   Camera thread:  EMPTY -> WRITING -> READY_FOR_INFERENCE
+//                   (skips slots in LOCKED_FOR_INFERENCE -- no blocking)
 //
-//   Worker thread:  READY_FOR_INFERENCE → LOCKED_FOR_INFERENCE → EMPTY
+//   Worker thread:  READY_FOR_INFERENCE -> LOCKED_FOR_INFERENCE -> EMPTY
 //                   (releases slot after inference completes)
 //
 // This guarantees zero data corruption without mutex contention on
 // the camera hot path (critical for maintaining 30fps on 3GB RAM devices).
-// /**
- * FrameState — atomic state flag for each circular buffer slot.
+
+/**
+ * FrameState -- atomic state flag for each circular buffer slot.
  * uint8_t backing for minimal cache line pressure across 5 slots.
  */
 enum class FrameState : uint8_t {
@@ -73,7 +76,7 @@ enum class FrameState : uint8_t {
 };
 
 /**
- * PixelFormat — supported camera frame pixel formats.
+ * PixelFormat -- supported camera frame pixel formats.
  * Used by PlatformImageHandler to select the correct conversion path.
  */
 enum class PixelFormat : uint8_t {
@@ -81,13 +84,15 @@ enum class PixelFormat : uint8_t {
     NV12,                   ///< iOS default (YCbCr 4:2:0 semi-planar)
     YUV_420_888,            ///< Android Camera2 API flexible YUV
     BGRA_8888,              ///< iOS alternative / preview format
-    RGB_888                 ///< Post-conversion working format
+    RGBA_8888,              ///< Standard RGBA
+    RGB_888,                ///< Post-conversion working format
+    BGR_888                 ///< Alternative working format
 };
 
 /**
- * FrameMetadata — lightweight descriptor for a buffered frame.
+ * FrameMetadata -- lightweight descriptor for a buffered frame.
  * Travels with the frame data pointer through the pipeline.
- * No heap allocations — all fixed-size fields.
+ * No heap allocations -- all fixed-size fields.
  */
 struct FrameMetadata {
     int width              = 0;
@@ -98,9 +103,10 @@ struct FrameMetadata {
     bool isFrontCamera     = true;
 };
 
-// // Result & Status Structures (plain C++ — safe to cross thread boundary)
-// /**
- * VerificationResult — returned from the complete pipeline execution.
+// Result & Status Structures (plain C++ -- safe to cross thread boundary)
+
+/**
+ * VerificationResult -- returned from the complete pipeline execution.
  * Contains only metadata; NEVER contains raw image data or embeddings.
  */
 struct VerificationResult {
@@ -115,7 +121,7 @@ struct VerificationResult {
 };
 
 /**
- * ModuleStatus — health check snapshot for diagnostics.
+ * ModuleStatus -- health check snapshot for diagnostics.
  */
 struct ModuleStatus {
     bool modelsLoaded      = false;
@@ -127,7 +133,7 @@ struct ModuleStatus {
 };
 
 /**
- * LivenessChallengeSequence — randomized challenge order for anti-spoof.
+ * LivenessChallengeSequence -- randomized challenge order for anti-spoof.
  */
 struct LivenessChallengeSequence {
     std::vector<std::string> challenges;  // e.g., ["BLINK", "SMILE"] or ["SMILE", "BLINK"]
@@ -135,8 +141,8 @@ struct LivenessChallengeSequence {
     int timeoutMs          = 10000;       // 10 second timeout per challenge
 };
 
-// // JSI HostObject — Primary Bridge
-// class FaceAuthHostObject : public facebook::jsi::HostObject {
+// JSI HostObject -- Primary Bridge
+class FaceAuthHostObject : public facebook::jsi::HostObject {
 public:
     /**
      * Construct with the JS thread's CallInvoker for safe async callbacks.
@@ -149,7 +155,7 @@ public:
 
     // JSI HostObject interface
     /**
-     * Property getter — routes JS property access to native implementations.
+     * Property getter -- routes JS property access to native implementations.
      * Maps: nativeVerifyUser, initializeModels, getModuleStatus,
      *        startLivenessChallenge, enrollUser, setSyncEndpoint
      */
@@ -158,7 +164,7 @@ public:
         const facebook::jsi::PropNameID& name) override;
 
     /**
-     * Property setter — currently no writable properties.
+     * Property setter -- currently no writable properties.
      */
     void set(
         facebook::jsi::Runtime& rt,
@@ -220,8 +226,8 @@ private:
         const ModuleStatus& status);
 };
 
-// // Install function — called from platform-specific glue (JNI / ObjC++)
-// /**
+// Install function -- called from platform-specific glue (JNI / ObjC++)
+/**
  * Install the FaceAuth JSI module into the JavaScript runtime.
  * Sets global.__FaceAuthModule as an accessor for the HostObject.
  *

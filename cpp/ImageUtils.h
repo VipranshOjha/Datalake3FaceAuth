@@ -1,6 +1,6 @@
 /**
  * ImageUtils.h
- * * Datalake 3.0 — High-Performance Image Manipulation
+ * * Datalake 3.0 -- High-Performance Image Manipulation
  * Hackathon 7.0 | NHAI
  * */
 #pragma once
@@ -19,8 +19,8 @@ namespace datalake {
 
 class ImageUtils {
 public:
-    // // Platform-Specific Color-Space Conversions
-    // #ifdef __ANDROID
+    // Platform-Specific Color-Space Conversions
+#ifdef __ANDROID__
     /**
      * Extracts AHardwareBuffer zero-copy DMA-BUF memory and converts it 
      * directly to RGB.
@@ -40,8 +40,7 @@ public:
     static bool convertCVPixelBufferToRGB(CVPixelBufferRef pixelBuffer, uint8_t* rgbOut, int outWidth, int outHeight);
 #endif
 
-    // // Matrix Operators & Alignment
-    // /**
+    /**
      * Affine alignment using standard 5-point facial landmarks 
      * to correct head tilt/yaw before passing vectors down the pipeline.
      */

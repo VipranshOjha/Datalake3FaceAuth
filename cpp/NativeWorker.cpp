@@ -1,11 +1,11 @@
 /**
  * NativeWorker.cpp
- * * Datalake 3.0 — High-Priority Background Worker Thread
+ * * Datalake 3.0 -- High-Priority Background Worker Thread
  * Hackathon 7.0 | NHAI
  * *
  * Implementation of the dedicated AI inference worker thread.
  * All face detection, landmark extraction, liveness checking, and
- * embedding generation runs here — never on the JS thread.
+ * embedding generation runs here -- never on the JS thread.
  */
 
 #include "NativeWorker.h"
@@ -37,8 +37,8 @@
 
 namespace datalake {
 
-// // Construction
-// NativeWorker::NativeWorker(const std::string& name)
+// Construction
+NativeWorker::NativeWorker(const std::string& name)
     : threadName_(name)
 {
     running_.store(true);
@@ -52,15 +52,15 @@ namespace datalake {
          threadName_.c_str());
 }
 
-// // Destruction
-// NativeWorker::~NativeWorker() {
+// Destruction
+NativeWorker::~NativeWorker() {
     if (running_.load()) {
         shutdown();
     }
 }
 
-// // Enqueue — Thread-safe task submission
-// void NativeWorker::enqueue(std::function<void()> task) {
+// Enqueue -- Thread-safe task submission
+void NativeWorker::enqueue(std::function<void()> task) {
     if (!running_.load()) {
         LOGW("Attempted to enqueue task on stopped worker '%s'\n",
              threadName_.c_str());
@@ -76,8 +76,8 @@ namespace datalake {
     cv_.notify_one();
 }
 
-// // Shutdown — Graceful termination with queue drain
-// void NativeWorker::shutdown() {
+// Shutdown -- Graceful termination with queue drain
+void NativeWorker::shutdown() {
     LOGI("Shutting down worker '%s'...\n", threadName_.c_str());
 
     shutdownRequested_.store(true);
@@ -95,8 +95,8 @@ namespace datalake {
          averageTaskTimeMs());
 }
 
-// // Status Queries
-// bool NativeWorker::isRunning() const {
+// Status Queries
+bool NativeWorker::isRunning() const {
     return running_.load();
 }
 
@@ -115,8 +115,8 @@ double NativeWorker::averageTaskTimeMs() const {
     return cumulativeTaskTimeMs_.load() / static_cast<double>(completed);
 }
 
-// // Worker Loop — Runs on the dedicated background thread
-// void NativeWorker::workerLoop() {
+// Worker Loop -- Runs on the dedicated background thread
+void NativeWorker::workerLoop() {
     // Step 1: Apply platform-specific thread priority FIRST
     applyThreadPriority();
 
@@ -178,11 +178,11 @@ double NativeWorker::averageTaskTimeMs() const {
     LOGI("Worker loop exited for '%s'\n", threadName_.c_str());
 }
 
-// // Platform-Specific Thread Priority Boost
-// void NativeWorker::applyThreadPriority() {
+// Platform-Specific Thread Priority Boost
+void NativeWorker::applyThreadPriority() {
 #ifdef __ANDROID__
-    // // ANDROID: Boost thread priority for responsive AI inference
-    // // Set thread name for debugger/profiler visibility
+    // ANDROID: Boost thread priority for responsive AI inference
+    // Set thread name for debugger/profiler visibility
     pthread_setname_np(pthread_self(), threadName_.c_str());
 
     // Boost priority: -10 is "audio" level priority on Android.
@@ -197,7 +197,7 @@ double NativeWorker::averageTaskTimeMs() const {
     }
 
     // Attempt to set SCHED_FIFO for real-time scheduling
-    // This may fail without root, which is acceptable — we fall back
+    // This may fail without root, which is acceptable -- we fall back
     // to the nice-based priority above.
     struct sched_param param;
     param.sched_priority = 1;  // Lowest FIFO priority
@@ -210,8 +210,8 @@ double NativeWorker::averageTaskTimeMs() const {
     }
 
 #elif defined(__APPLE__)
-    // // iOS: Use QoS class for system-level scheduling priority
-    // // Set thread name for Instruments visibility
+    // iOS: Use QoS class for system-level scheduling priority
+    // Set thread name for Instruments visibility
     pthread_setname_np(threadName_.c_str());
 
     // QOS_CLASS_USER_INITIATED: second-highest priority class.
@@ -226,7 +226,7 @@ double NativeWorker::averageTaskTimeMs() const {
     }
 
 #else
-    // // Desktop / other: just set the thread name
+    // Desktop / other: just set the thread name
     // LOGI("No platform-specific priority boost available.\n");
 #endif
 }
